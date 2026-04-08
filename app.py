@@ -8,25 +8,29 @@ import datetime
 import os
 from google import genai
 
-# --- CONFIG ---
+# --- 1. CONFIGURATION ---
 FAMOUS_STOCKS = {
     "NVIDIA": "NVDA", "Tesla": "TSLA", "Apple": "AAPL", 
     "Microsoft": "MSFT", "Amazon": "AMZN", "Google": "GOOGL", 
     "Meta": "META", "Netflix": "NFLX", "AMD": "AMD", "Reliance": "RELIANCE.NS"
 }
 
-# --- DIRECTION 1: THE MEMORY ENGINE ---
+# --- 2. DIRECTION 1: DATA PERSISTENCE (MEMORY) ---
 def log_sentiment_data(ticker, avg_sentiment):
     log_file = "market_history.csv"
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    new_entry = pd.DataFrame([[timestamp, ticker, avg_sentiment]], columns=['Timestamp', 'Ticker', 'Sentiment'])
-    if not os.path.isfile(log_file): 
+    
+    new_entry = pd.DataFrame([[timestamp, ticker, avg_sentiment]], 
+                             columns=['Timestamp', 'Ticker', 'Sentiment'])
+    
+    if not os.path.isfile(log_file):
         new_entry.to_csv(log_file, index=False)
-    else: 
+    else:
         new_entry.to_csv(log_file, mode='a', header=False, index=False)
+    
     return pd.read_csv(log_file)
 
-# --- THE ANTI-BLOCK SCRAPER ---
+# --- 3. ANTI-BLOCK SCRAPER ENGINE ---
 def get_news(ticker):
     url = f'https://finviz.com/quote.ashx?t={ticker}'
     headers = {
@@ -36,10 +40,14 @@ def get_news(ticker):
     try:
         session = requests.Session()
         r = session.get(url, headers=headers, timeout=10)
-        if r.status_code != 200: return None
+        if r.status_code != 200:
+            return None
+            
         soup = BeautifulSoup(r.content, 'html.parser')
         news_table = soup.find(id='news-table')
-        if not news_table: return None
+        if not news_table:
+            return None
+            
         data = []
         for row in news_table.find_all('tr')[:15]:
             a_tag = row.find('a')
@@ -48,12 +56,14 @@ def get_news(ticker):
             score = TextBlob(text).sentiment.polarity
             data.append([text, score])
         return pd.DataFrame(data, columns=['Headline', 'Sentiment'])
-    except: return None
+    except:
+        return None
 
-# --- UI SETUP ---
+# --- 4. USER INTERFACE SETUP ---
 st.set_page_config(page_title="Market Mood AI", layout="wide")
-st.title("📈 AI Market Sentinel: Full Intelligence Pipeline")
+st.title("📈 AI Market Sentinel")
 
+# Sidebar
 st.sidebar.header("🔑 Authentication")
 user_key = st.sidebar.text_input("Enter Gemini API Key", type="password")
 
@@ -62,43 +72,53 @@ target_ticker = FAMOUS_STOCKS[choice]
 
 if st.sidebar.button("Execute AI Analysis"):
     if not user_key:
-        st.sidebar.error("⚠️ Enter API Key first!")
+        st.sidebar.error("⚠️ Please enter your Gemini API Key first!")
     else:
-        with st.spinner("🤖 Summoning Chief Analyst..."):
+        with st.spinner(f"🕵️ Analyzing {choice} Market Sentiment..."):
+            # Step 1: Scraping
             df = get_news(target_ticker)
             
             if df is not None:
                 avg_s = df['Sentiment'].mean()
                 
-                # PERSISTENCE: Save the data point
+                # Step 2: Direction 1 - Log and Load History
                 history_df = log_sentiment_data(target_ticker, avg_s)
                 
-                # Visuals (Gauge + Trend)
-                c1, c2 = st.columns(2)
-                with c1:
-                    fig = go.Figure(go.Indicator(mode="gauge+number", value=avg_s, 
-                          title={'text': f"{choice} Mood"}, gauge={'axis':{'range':[-1,1]}}))
+                # Step 3: Visuals
+                col1, col2 = st.columns(2)
+                with col1:
+                    fig = go.Figure(go.Indicator(
+                        mode="gauge+number", value=avg_s,
+                        title={'text': f"Current {choice} Mood"},
+                        gauge={'axis': {'range': [-1, 1]}, 'bar': {'color': "#00f2fe"}}
+                    ))
                     st.plotly_chart(fig, use_container_width=True)
-                with c2:
-                    st.subheader("📊 Historical Trend")
+                
+                with col2:
+                    st.subheader("📊 Historical Sentiment Trend")
                     ticker_hist = history_df[history_df['Ticker'] == target_ticker]
+                    # Convert timestamp to index for better plotting
                     st.line_chart(ticker_hist.set_index('Timestamp')['Sentiment'])
                 
-                # AI ANALYSIS
+                # Step 4: Direction 2 - AI Analysis
                 st.divider()
                 st.subheader("🕵️ Chief Analyst Insight")
                 try:
+                    # FIX: Use the specific 2026 syntax for google-genai
                     client = genai.Client(api_key=user_key)
-                    context = "\n".join(df['Headline'].head(10).tolist())
+                    context_text = "\n".join(df['Headline'].head(10).tolist())
+                    
+                    # FIX: Removed 'models/' prefix to avoid 404 NOT FOUND
                     response = client.models.generate_content(
                         model="gemini-1.5-flash",
-                        contents=f"Analyze these headlines for {choice}: {context}. Give 3 ruthless bullet points on risk, drivers, and 24h outlook."
+                        contents=f"Analyze these headlines for {choice}: {context_text}. Give 3 ruthless bullet points on risk, drivers, and 24h outlook."
                     )
                     st.info(response.text)
                 except Exception as e:
-                    st.error(f"AI Error: {e}")
+                    st.error(f"AI Connection Error: {e}")
                 
-                st.subheader("Latest Headlines")
+                # Step 5: Raw Data Table
+                st.subheader("Latest Headlines Scraped")
                 st.dataframe(df, use_container_width=True)
             else:
-                st.error("Failed to fetch news. Finviz is still blocking or down.")
+                st.error("Failed to fetch news. The source (Finviz) might be temporarily blocking the connection.")
