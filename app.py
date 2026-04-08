@@ -11,7 +11,7 @@ import google.generativeai as genai
 # --- AI SETUP ---
 # For safety, I'm making this an input in the sidebar so you don't leak it in code
 st.sidebar.header("🔑 AI Authentication")
-api_key = st.sidebar.text_input("AIzaSyAVk3Z-w9wLEKxcBE35MzZRl6O0h0kbTB8", type="password")
+api_key = st.sidebar.text_input("AIzaSyB4I393bG8M37USl_ew96JQNPT--0XCPTY", type="password")
 
 if api_key:
     genai.configure(api_key=api_key)
