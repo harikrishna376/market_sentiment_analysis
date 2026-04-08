@@ -48,6 +48,22 @@ def get_live_news_elite(ticker):
 # 3. STREAMLIT UI SETUP
 st.set_page_config(page_title="Market Mood AI", layout="wide")
 st.title("📈 Market Mood AI: Elite Sentiment Analysis")
+# --- THE KNOWLEDGE HUB ---
+with st.expander("ℹ️ How to read the Sentiment Scale"):
+    st.markdown("""
+    ### The Sentiment Scale (-1 to 1)
+    This AI analyzes financial headlines and assigns a score based on emotional weight and market impact.
+    
+    | Value | Market Meaning | Example Headline |
+    | :--- | :--- | :--- |
+    | **1.0** | **🚀 Extreme Bullish** | "NVIDIA profits skyrocket 200% as AI demand surges." |
+    | **0.5** | **✅ Strongly Positive** | "Apple beats earnings expectations; shares rise." |
+    | **0.0** | **😐 Neutral / Flat** | "Microsoft announces routine board meeting." |
+    | **-0.5** | **⚠️ Strongly Negative** | "Amazon faces heavy fine over data privacy." |
+    | **-1.0** | **📉 Extreme Bearish** | "Market crash imminent as tech stocks plunge." |
+    
+    **Note:** We use a *Weighted Engine* that boosts the importance of keywords like 'AI', 'Profit', and 'Loss'.
+    """)
 
 # SIDEBAR SELECTION
 st.sidebar.header("Control Panel")
