@@ -6,110 +6,80 @@ from bs4 import BeautifulSoup
 import plotly.graph_objects as go
 import datetime
 import os
+import google.generativeai as genai
 
-# 1. SETUP THE FAMOUS STOCKS
+# --- AI SETUP ---
+# For safety, I'm making this an input in the sidebar so you don't leak it in code
+st.sidebar.header("🔑 AI Authentication")
+api_key = st.sidebar.text_input("AIzaSyAVk3Z-w9wLEKxcBE35MzZRl6O0h0kbTB8", type="password")
+
+if api_key:
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel('gemini-1.5-flash')
+
+# --- CONFIG & SCRAPER ---
 FAMOUS_STOCKS = {
-    "NVIDIA": "NVDA",
-    "Tesla": "TSLA",
-    "Apple": "AAPL",
-    "Microsoft": "MSFT",
-    "Amazon": "AMZN",
-    "Google": "GOOGL",
-    "Meta": "META",
-    "Netflix": "NFLX",
-    "AMD": "AMD",
-    "Reliance": "RELIANCE.NS"
+    "NVIDIA": "NVDA", "Tesla": "TSLA", "Apple": "AAPL", 
+    "Microsoft": "MSFT", "Amazon": "AMZN", "Google": "GOOGL", 
+    "Meta": "META", "Netflix": "NFLX", "AMD": "AMD", "Reliance": "RELIANCE.NS"
 }
 
-# 2. THE MEMORY ENGINE (Direction 1: Data Persistence)
-def log_sentiment_data(ticker, avg_sentiment):
+def log_data(ticker, sentiment):
     log_file = "market_history.csv"
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
-    new_entry = pd.DataFrame([[timestamp, ticker, avg_sentiment]], 
-                             columns=['Timestamp', 'Ticker', 'Sentiment'])
-    
-    if not os.path.isfile(log_file):
-        new_entry.to_csv(log_file, index=False)
-    else:
-        new_entry.to_csv(log_file, mode='a', header=False, index=False)
-    
+    time_stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    new_data = pd.DataFrame([[time_stamp, ticker, sentiment]], columns=['Timestamp', 'Ticker', 'Sentiment'])
+    if not os.path.isfile(log_file): new_data.to_csv(log_file, index=False)
+    else: new_data.to_csv(log_file, mode='a', header=False, index=False)
     return pd.read_csv(log_file)
 
-# 3. THE SCRAPER ENGINE
-def get_live_news_elite(ticker):
+def get_news(ticker):
+    headers = {'user-agent': 'Mozilla/5.0'}
     url = f'https://finviz.com/quote.ashx?t={ticker}'
-    headers = {'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/123.0.0.0 Safari/537.36'}
-    multipliers = {'ai': 2.5, 'profit': 2.0, 'surge': 2.0, 'loss': 2.5, 'lawsuit': 3.0, 'growth': 1.5}
     try:
-        response = requests.get(url, headers=headers)
-        soup = BeautifulSoup(response.content, 'html.parser')
+        r = requests.get(url, headers=headers)
+        soup = BeautifulSoup(r.content, 'html.parser')
         news_table = soup.find(id='news-table')
-        if news_table is None: return None
-        headlines = []
-        for row in news_table.find_all('tr'):
-            a_tag = row.find('a')
-            if not a_tag: continue
-            text = a_tag.get_text()
-            timestamp = row.td.get_text().strip() if row.td else "N/A"
+        data = []
+        for row in news_table.find_all('tr')[:15]:
+            text = row.a.get_text()
             score = TextBlob(text).sentiment.polarity
-            if ticker.lower() not in text.lower(): score *= 0.3 
-            for word, boost in multipliers.items():
-                if word in text.lower(): score *= boost
-            score = max(min(score, 1), -1)
-            headlines.append([timestamp, text, score])
-        return pd.DataFrame(headlines, columns=['Time', 'Headline', 'Sentiment'])
+            data.append([text, score])
+        return pd.DataFrame(data, columns=['Headline', 'Sentiment'])
     except: return None
 
-# 4. UI SETUP
-st.set_page_config(page_title="Market Mood AI", layout="wide")
-st.title("📈 Market Mood AI: Predictive Sentiment Engine")
+# --- UI ---
+st.title("🤖 AI Market Sentinel (Direction 2)")
 
-# Legend/Knowledge Hub
-with st.expander("ℹ️ How to read the Sentiment Scale"):
-    st.markdown("""
-    | Value | Market Meaning | Example |
-    | :--- | :--- | :--- |
-    | **1.0** | **🚀 Extreme Bullish** | Skyrocketing profits |
-    | **0.0** | **😐 Neutral** | Routine news |
-    | **-1.0** | **📉 Extreme Bearish** | Market crash/lawsuits |
-    """)
-
-# SIDEBAR
-st.sidebar.header("Control Panel")
 choice = st.sidebar.selectbox("Select Target Stock:", list(FAMOUS_STOCKS.keys()))
 target_ticker = FAMOUS_STOCKS[choice]
 
-if st.sidebar.button("Run Mission"):
-    df = get_live_news_elite(target_ticker)
-    
-    if df is not None:
-        avg_score = df['Sentiment'].mean()
-        
-        # LOG DATA FOR DIRECTION 1
-        history_df = log_sentiment_data(target_ticker, avg_score)
-        
-        # COLUMNS FOR GAUGE AND TREND
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            fig_gauge = go.Figure(go.Indicator(
-                mode = "gauge+number", value = avg_score,
-                title = {'text': f"Current {choice} Mood"},
-                gauge = {'axis': {'range': [-1, 1]}, 'bar': {'color': "#00f2fe"}}
-            ))
-            st.plotly_chart(fig_gauge, use_container_width=True)
-            
-        with col2:
-            st.subheader("📊 Historical Sentiment Trend")
-            ticker_history = history_df[history_df['Ticker'] == target_ticker]
-            if not ticker_history.empty:
-                st.line_chart(ticker_history.set_index('Timestamp')['Sentiment'])
-            else:
-                st.write("First data point recorded! Run again later to see trends.")
-
-        # RAW DATA
-        st.subheader("Latest Headlines")
-        st.dataframe(df.sort_values(by='Sentiment', ascending=False), use_container_width=True)
+if st.sidebar.button("Execute AI Analysis"):
+    if not api_key:
+        st.error("❌ Please enter your Gemini API Key in the sidebar first!")
     else:
-        st.error("Connection lost. Try again.")
+        with st.spinner("Analyzing market psychology..."):
+            df = get_news(target_ticker)
+            if df is not None:
+                avg_s = df['Sentiment'].mean()
+                hist_df = log_data(target_ticker, avg_s)
+                
+                # Visuals
+                c1, c2 = st.columns(2)
+                with c1:
+                    fig = go.Figure(go.Indicator(mode="gauge+number", value=avg_s, 
+                          title={'text': f"{choice} Sentiment"}, gauge={'axis':{'range':[-1,1]}}))
+                    st.plotly_chart(fig, use_container_width=True)
+                with c2:
+                    st.subheader("📈 History")
+                    st.line_chart(hist_df[hist_df['Ticker']==target_ticker].set_index('Timestamp')['Sentiment'])
+                
+                # THE AI ANALYSIS
+                st.divider()
+                st.subheader("🕵️ Chief Analyst Insight")
+                context = "\n".join(df['Headline'].head(10).tolist())
+                prompt = f"As a Wall Street expert, analyze these headlines for {choice}: {context}. Give me 3 bullet points on risk, drivers, and a 24-hour outlook. Be sharp and professional."
+                
+                response = model.generate_content(prompt)
+                st.info(response.text)
+                
+                st.dataframe(df, use_container_width=True)
