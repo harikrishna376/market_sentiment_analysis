@@ -17,19 +17,41 @@ FAMOUS_STOCKS = {
 
 # --- FUNCTIONS ---
 def get_news(ticker):
-    headers = {'user-agent': 'Mozilla/5.0'}
     url = f'https://finviz.com/quote.ashx?t={ticker}'
+    
+    # Advanced Headers to mimic a real browser perfectly
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': 'https://www.google.com/'
+    }
+    
     try:
-        r = requests.get(url, headers=headers)
+        # Using a session is more stable
+        session = requests.Session()
+        r = session.get(url, headers=headers, timeout=10)
+        
+        if r.status_code != 200:
+            return None
+            
         soup = BeautifulSoup(r.content, 'html.parser')
         news_table = soup.find(id='news-table')
+        
+        if not news_table:
+            return None
+            
         data = []
         for row in news_table.find_all('tr')[:15]:
-            text = row.a.get_text()
+            a_tag = row.find('a')
+            if not a_tag: continue
+            text = a_tag.get_text()
             score = TextBlob(text).sentiment.polarity
             data.append([text, score])
         return pd.DataFrame(data, columns=['Headline', 'Sentiment'])
-    except: return None
+    except Exception as e:
+        print(f"Scraping Error: {e}")
+        return None
 
 # --- UI ---
 st.set_page_config(page_title="Market Mood AI", layout="wide")
